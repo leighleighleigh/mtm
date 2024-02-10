@@ -1051,6 +1051,7 @@ handlechar(int r, int k) /* Handle a single input character. */
     const char cmdstr[] = {commandkey, 0};
     static bool cmd = false;
     static bool altcmd = false;
+    static bool cancel = false;
     NODE *n = focused;
     #define KERR(i) (r == ERR && (i) == k)
     #define KEY(i)  (r == OK  && (i) == k)
@@ -1058,11 +1059,25 @@ handlechar(int r, int k) /* Handle a single input character. */
     #define INSCR (n->s->tos != n->s->off)
     #define SB scrollbottom(n)
     #define DO(s, t, a) \
-        if (s == cmd && (t)) { a ; cmd = false; return true; }
+        if ((s == cmd) && (!cancel) && (t)) { a ; cmd = false; return true; }
     #define DOALT(s, t, a) \
-        if (s == altcmd && (t)) { a ; altcmd = false; return true; }
+        if ((s == altcmd) && (!cancel) && (t)) { a ; altcmd = false; return true; }
+    #define CANCEL(s, t) \
+        if (s && (!cancel) && (t)) { cancel = true ; }
 
-    // cmd state prior, test, action. this is a macro-ized state machine.
+// if debug, print state of static vars
+#ifdef DEBUG_WCH
+    fprintf(stderr, "\ncmd: %d, altcmd: %d, cancel: %d\n", cmd, altcmd, cancel);
+#endif
+
+    // ESCAPE is the same code (27) as ALT.
+    // If we receive ALT+<KEY> in sequence (pressed together), an alt-command will be triggered.
+    // If they weren't pressed together, the key is passed onto the terminal after a very small delay.
+    // Hence, the first check here is a short-circuit case -
+    //  1. We have received an ALT/ESC, and entered alt-command mode. 
+    //  2. Then, we read a keyerror. cancel is set true.
+    //  3. The key codes are passed onto the terminal.
+    CANCEL(altcmd, KERR(0) )
     DO(cmd,   KERR(k),              return false)
     DO(cmd,   CODE(KEY_RESIZE),     reshape(root, 0, 0, LINES, COLS); SB)
     DO(false, KEY(commandkey),      return cmd = true)
@@ -1127,7 +1142,17 @@ handlechar(int r, int k) /* Handle a single input character. */
         SEND(n, c);
     }
 
-    return altcmd = false, cmd = false, true;
+    altcmd = false;
+    cmd = false;
+
+    if (cancel) {
+#ifdef DEBUG_WCH
+        fprintf(stderr, "\nCancel: %d\n", cancel);
+#endif
+        return cancel = false, false;
+    }
+    
+    return true;
 }
 
 static void
@@ -1143,8 +1168,11 @@ run(void) /* Run MTM. */
 
 #ifdef DEBUG_WCH
         // print the ascii key code received, if r == OK
-        if (r == OK)
-            fprintf(stderr, "\nwch: %d\n", w);
+        if (r == OK) {
+            fprintf(stderr, "\ntop-wchOK: %d\n", w);
+        }else{
+            fprintf(stderr, "\ntop-wchERR: %d\n", w);
+        }
 #endif
 
         // if the handlechar handler is true, we will keep feeding it with more inputs,
@@ -1152,9 +1180,12 @@ run(void) /* Run MTM. */
         while (handlechar(r, w)){
             r = wget_wch(focused->s->win, &w);
 #ifdef DEBUG_WCH
-            // print the ascii key code received, if r == OK
-            if (r == OK)
-                fprintf(stderr, "\nwch: %d\n", w);
+            // print the ascii key code received, or err if there wasn't one.
+            if (r == OK){
+                fprintf(stderr, "\nwchOK: %d\n", w);
+            }else{
+                fprintf(stderr, "\nwchERR: %d\n", w);
+            }
 #endif
         }
 
