@@ -3,7 +3,7 @@ let
   mtm = pkgs.callPackage ./default.nix { };
 in
 pkgs.mkShell rec {
-  buildInputs = [ mtm ];
+  buildInputs = [ mtm pkgs.ncurses ];
 
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
 
