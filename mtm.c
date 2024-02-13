@@ -1146,6 +1146,11 @@ handlechar(int r, int k) /* Handle a single input character. */
     cmd = false;
 
     if (cancel) {
+        // send the escape char!
+        if (wctomb(c, ALT_COMMAND_KEY) > 0) {
+          SEND(n, c);
+        }
+
 #ifdef DEBUG_WCH
         fprintf(stderr, "\nCancel: %d\n", cancel);
 #endif
